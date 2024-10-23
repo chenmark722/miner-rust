@@ -1,0 +1,101 @@
+name: Build Proxy
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  GITHUB_TOKEN: ${{ github.token }}
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os_name: Linux-x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-musl
+            bin: dod_miner
+            name: dod_miner-Linux-x86_64-musl.tar.gz
+          - os_name: Linux-aarch64
+            os: ubuntu-20.04
+            target: aarch64-unknown-linux-musl
+            bin: dod_miner
+            name: dod_miner-Linux-aarch64-musl.tar.gz
+          - os_name: Linux-arm
+            os: ubuntu-20.04
+            target: arm-unknown-linux-musleabi
+            bin: dod_miner
+            name: dod_miner-Linux-arm-musl.tar.gz
+          - os_name: macOS-x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: dod_miner
+            name: dod_miner-Darwin-x86_64.tar.gz
+          - os_name: macOS-aarch64
+            os: macOS-latest
+            target: aarch64-apple-darwin
+            bin: dod_miner
+            name: dod_miner-Darwin-aarch64.tar.gz
+            skip_tests: true
+        toolchain:
+          - stable
+          #          - beta
+          #           - nightly
+    steps:
+      - uses: actions/checkout@v3
+      - name: Cache cargo & target directories
+        uses: Swatinem/rust-cache@v2
+      - name: Configure Git
+        run: |
+          git config --global user.email "dod_miner@wizzwallet.io"
+          git config --global user.name "WizzWallet"
+      - name: Install musl-tools on Linux
+        run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
+        if: contains(matrix.platform.name, 'musl')
+      - name: Install libssl on Linux
+        run: sudo apt-get update --yes && sudo apt-get install --yes pkg-config libssl-dev build-essential
+        if: contains(matrix.platform.os, 'ubuntu')
+      - name: Build binary
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: 'build'
+          target: ${{ matrix.platform.target }}
+          toolchain: ${{ matrix.toolchain }}
+          args: '--release --package=dod_miner'
+          strip: true
+      - name: Package as archive
+        shell: bash
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
+            7z a ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
+          else
+            tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
+          fi
+          cd -
+        if: startsWith( github.ref, 'refs/tags/v' )
+      - name: Publish release artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dod_miner-${{ matrix.platform.os_name }}
+          path: 'dod_miner-*'
+      - name: Generate SHA-256
+        run: shasum -a 256 ${{ matrix.platform.name }}
+        if: matrix.platform.os == 'macOS-latest' && startsWith( github.ref, 'refs/tags/v' )
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: 'dod_miner-*'
+          token: ${{ secrets.GITHUB_TOKEN }}
+        if: startsWith( github.ref, 'refs/tags/v' )

@@ -9,7 +9,6 @@ use dod_utils::bitwork::Bitwork;
 use dotenv::dotenv;
 use flume::Sender;
 use log::{error, info};
-use std::env;
 use std::time::Duration;
 use tokio_cron_scheduler::{Job, JobScheduler, JobSchedulerError};
 
@@ -22,12 +21,13 @@ enum DodCli {
 struct MinerArgs {
     #[arg(long = "threads")]
     threads: Option<u32>,
-    // #[arg(long = "wif")]
-    // wif: Option<String>,
-    // #[arg(long = "siwb_canister")]
-    // siwb_canister: Option<String>,
-    // #[arg(long = "dod_canister")]
-    // dod_canister: Option<String>,
+    #[arg(long = "wif")]
+    wif: String,
+    #[arg(long = "cycles_price")]
+    cycles_price: String, // #[arg(long = "siwb_canister")]
+                          // siwb_canister: Option<String>,
+                          // #[arg(long = "dod_canister")]
+                          // dod_canister: Option<String>,
 }
 
 #[tokio::main]
@@ -36,26 +36,15 @@ async fn main() {
     dotenv().ok();
     log4rs::init_file("config/log4rs.yaml", Default::default()).unwrap();
 
-    let _siwb_canister = env::var("SIWB_CANISTER")
-        .map_err(|_| "SIWB_CANISTER not found in .env file".to_string())
-        .unwrap();
-    let _dod_canister = env::var("DOD_CANISTER")
-        .map_err(|_| "DOD_CANISTER not found in .env file".to_string())
-        .unwrap();
-    let _ic_network = env::var("IC_NETWORK")
-        .map_err(|_| "IC_NETWORK not found in .env file".to_string())
-        .unwrap();
-    let _account_wif = env::var("WIF")
-        .map_err(|_| "WIF not found in .env file".to_string())
-        .unwrap();
+    let _siwb_canister = String::from("mwm4a-eiaaa-aaaah-aebnq-cai");
+    let _dod_canister = String::from("tmhkz-dyaaa-aaaah-aedeq-cai");
+    let _ic_network = String::from("ic");
+    let _account_wif = minter_args.wif;
 
-    let _deadline_diff = env::var("DEAD_LINE_DIFF")
-        .map_err(|_| "DEAD_LINE_DIFF not found in .env file".to_string())
-        .unwrap();
-
-    let _cycles_price = env::var("CYCLES_PRICE")
-        .map_err(|_| "CYCLES_PRICE not found in .env file".to_string())
-        .unwrap().parse::<u128>().unwrap() * u128::pow(10,12);
+    let _deadline_diff = String::from("5000000000");
+    let _cycles_price = (minter_args.cycles_price.parse::<f64>().unwrap()
+        * u128::pow(10, 12) as f64)
+        .round() as u128;
 
     let _threads = minter_args
         .threads
